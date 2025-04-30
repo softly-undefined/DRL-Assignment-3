@@ -1,21 +1,19 @@
-import gym
-import numpy as np
-from gym_super_mario_bros.actions import COMPLEX_MOVEMENT
-from gym_super_mario_bros import make as make_mario
-from nes_py.wrappers import JoypadSpace
-from gym.wrappers import FrameStack, GrayScaleObservation, ResizeObservation
-import torch
-import torch.nn as nn
-import random
-from collections import deque
 import os
 import datetime
+import random
 from pathlib import Path
+import numpy as np
+import torch
+import torch.nn as nn
 import torch.optim as optim
 from torchvision import transforms as T
 from PIL import Image
+import gym
 import gym_super_mario_bros
 from gym.spaces import Box
+from gym_super_mario_bros.actions import COMPLEX_MOVEMENT
+from nes_py.wrappers import JoypadSpace
+from gym.wrappers import FrameStack, GrayScaleObservation, ResizeObservation
 from tensordict import TensorDict
 from torchrl.data import TensorDictReplayBuffer, LazyMemmapStorage
 import pandas as pd
@@ -119,7 +117,7 @@ class DQNAgent:
         self.qnet          = QNet(self.n_states, self.n_actions).float().to(self.device)
         self.epsilon       = 1.0
         self.epsilon_min   = 0.01
-        self.epsilon_decay = 0.999995
+        self.epsilon_decay = 0.999996
         self.step_count    = 0
         self.update_every  = 50_000
 
@@ -235,19 +233,80 @@ class DQNAgent:
         loss   = self.update_q_online(td_est, td_tgt)
         return (td_est.mean().item(), loss)
 
-# Do not modify the input of the 'act' function and the '__init__' function. 
-class Agent(object):
-    """Agent that acts randomly."""
-    def __init__(self):
-        self.device = torch.device('cpu')
-        self.num_actions = len(COMPLEX_MOVEMENT)
+class LogProgress:
+    def __init__(self, save_dir: Path, ma_window=100, show_plot=True):
+        self.save_path = save_dir / "learning_overview.jpg"
+        self.ma_window = ma_window
+        self.rewards   = []
+        self.lengths   = []
 
-        self.agent = DQNAgent(
-            n_states = (4, 84, 84),
-            n_actions = self.num_actions,
-            checkpoint=Path('new_checkpoint2') / 'mario_net_123.chkpt'
+        if show_plot:
+            plt.ion()
+            self.fig, self.ax = plt.subplots(figsize=(8,4))
+
+    def record(self, episode, reward, length):
+        self.rewards.append(reward)
+        self.lengths.append(length)
+
+        # pandas rolling with min_periods=1 ensures one point per epi
+        ser_r = pd.Series(self.rewards)
+        ser_l = pd.Series(self.lengths)
+        ma_r   = ser_r.rolling(self.ma_window, min_periods=1).mean().to_numpy()
+        ma_l   = ser_l.rolling(self.ma_window, min_periods=1).mean().to_numpy()
+
+        episodes = np.arange(1, len(self.rewards)+1)
+
+        # update plot
+        self.ax.clear()
+        self.ax.plot(episodes, ma_r, label="Reward MA")
+        self.ax.plot(episodes, ma_l, label="Length MA")
+        self.ax.set_xlabel("Episode")
+        self.ax.set_ylabel(f"{self.ma_window}-Episode MA")
+        self.ax.legend(loc="upper right")
+        self.fig.tight_layout()
+        plt.draw()
+
+        # save
+        plt.savefig(self.save_path, bbox_inches="tight")
+
+
+#create environment
+env = gym_super_mario_bros.make('SuperMarioBros-v0')
+env = JoypadSpace(env, COMPLEX_MOVEMENT)
+env = SkipFrame(env, skip=5)
+env = GrayScaleObservation(env)
+env = ResizeObservation(env, shape=84)
+env = FrameStack(env, num_stack=4)
+
+save_dir = Path("new_checkpoint7")
+save_dir.mkdir(parents=True)
+mario = DQNAgent(n_states=(4, 84, 84), n_actions=env.action_space.n, save_dir=save_dir)
+logger = LogProgress(save_dir, ma_window=100)
+
+episodes = 50_000
+for e in trange(episodes):
+
+    state = env.reset()
+    total_reward = 0.0
+    total_length = 0
+    done = False
+
+    while not done:
+        action = mario.act(state)
+        next_state, reward, done, info = env.step(action)
+        mario.cache(state, next_state, action, reward, done)
+        q, loss = mario.learn()
+
+        state = next_state
+        total_reward += reward
+        total_length += 1
+
+    logger.record(e, total_reward, total_length)
+
+    if (e % 20 == 0) or (e == episodes - 1):
+        print(
+            f"Episode {e:5d} | "
+            f"Reward {total_reward:7.1f} | "
+            f"Length {total_length:5d} | "
+            f"Epsilon {mario.epsilon:.3f}"
         )
-        self.agent.epsilon = 0.0
-
-    def act(self, observation):
-        return self.agent.act(observation)

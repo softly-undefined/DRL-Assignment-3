@@ -1,28 +1,26 @@
-import gym
-import numpy as np
-from gym_super_mario_bros.actions import COMPLEX_MOVEMENT
-from gym_super_mario_bros import make as make_mario
-from nes_py.wrappers import JoypadSpace
-from gym.wrappers import FrameStack, GrayScaleObservation, ResizeObservation
-import torch
-import torch.nn as nn
-import random
-from collections import deque
 import os
 import datetime
+import random
 from pathlib import Path
+import numpy as np
+import torch
+import torch.nn as nn
 import torch.optim as optim
 from torchvision import transforms as T
 from PIL import Image
+import gym
 import gym_super_mario_bros
 from gym.spaces import Box
+from gym_super_mario_bros.actions import COMPLEX_MOVEMENT
+from nes_py.wrappers import JoypadSpace
+from gym.wrappers import FrameStack, GrayScaleObservation, ResizeObservation
 from tensordict import TensorDict
 from torchrl.data import TensorDictReplayBuffer, LazyMemmapStorage
 import pandas as pd
 import matplotlib.pyplot as plt
 from tqdm import trange
 import time
-
+#used this to test internally
 
 class SkipFrame(gym.Wrapper):
     def __init__(self, env, skip=5): # 5 frames
@@ -235,19 +233,94 @@ class DQNAgent:
         loss   = self.update_q_online(td_est, td_tgt)
         return (td_est.mean().item(), loss)
 
-# Do not modify the input of the 'act' function and the '__init__' function. 
-class Agent(object):
-    """Agent that acts randomly."""
-    def __init__(self):
-        self.device = torch.device('cpu')
-        self.num_actions = len(COMPLEX_MOVEMENT)
+class LogProgress:
+    def __init__(self, save_dir: Path, ma_window=100):
+        self.save_path = save_dir / "learning_overview.jpg"
+        self.ma_window = ma_window
+        self.rewards = []
+        self.lengths = []
+        # (optional) if you want to store them
+        self.epsilons = []
+        self.steps    = []
 
-        self.agent = DQNAgent(
-            n_states = (4, 84, 84),
-            n_actions = self.num_actions,
-            checkpoint=Path('new_checkpoint2') / 'mario_net_123.chkpt'
+    # add epsilon and step as optional kwargs
+    def record(self, episode, reward, length, *, epsilon=None, step=None):
+        self.rewards.append(reward)
+        self.lengths.append(length)
+
+        if epsilon is not None:
+            self.epsilons.append(epsilon)
+        if step is not None:
+            self.steps.append(step)
+
+        window = self.ma_window
+        ma_rewards = (
+            np.convolve(self.rewards, np.ones(window)/window, mode="valid")
+            if len(self.rewards) >= window
+            else np.array(self.rewards)
         )
-        self.agent.epsilon = 0.0
+        ma_lengths = (
+            np.convolve(self.lengths, np.ones(window)/window, mode="valid")
+            if len(self.lengths) >= window
+            else np.array(self.lengths)
+        )
 
-    def act(self, observation):
-        return self.agent.act(observation)
+        plt.clf()
+        plt.plot(ma_rewards, label="Reward MA")
+        plt.plot(ma_lengths, label="Length MA")
+        plt.xlabel("Episode")
+        plt.ylabel(f"{window}-Episode Moving Avg")
+        plt.legend(loc="upper right")
+        plt.tight_layout()
+        plt.savefig(self.save_path)
+        plt.close()
+
+
+env = gym_super_mario_bros.make('SuperMarioBros-v0')
+env = JoypadSpace(env, COMPLEX_MOVEMENT)
+env = SkipFrame(env, skip=4)
+env = GrayScaleObservation(env)
+env = ResizeObservation(env, shape=84)
+env = FrameStack(env, num_stack=4)
+
+agent = DQNAgent(
+    n_states = (env.observation_space.shape[0],
+                env.observation_space.shape[1],
+                env.observation_space.shape[2]),
+    n_actions = env.action_space.n,
+    save_dir = Path('demo'),
+    checkpoint = Path('new_checkpoint2') / 'mario_net_123.chkpt'
+)
+
+agent.epsilon = 0.0
+
+num_episodes = 100
+total_rewards = []
+for ep in range(1, num_episodes + 1):
+    state = env.reset()
+    done = False
+    total = 0.0
+    while not done:
+        if ep == 1 or ep % 1 == 0: #only print the last one
+            env.render()
+        action = agent.act(state, deterministic=False) # True)
+        state, reward, done, info = env.step(action)
+        total += reward
+        # time.sleep(0.02) #render delay
+    print(f"Episode {ep}: total_reward = {total:.2f}")
+    total_rewards.append(total)
+
+env.close()
+
+avg_reward = sum(total_rewards) / len(total_rewards)
+print(f"\nAverage reward over {num_episodes} episodes: {avg_reward:.2f}")
+
+
+# 1067.18 on train5
+# 2278
+# 3000 at 50 at 6k episodes ish
+# 3030 chkpt 105
+
+# 117: 3061
+# 120: 2897
+# 123: 3139
