@@ -5,3 +5,10 @@ argparse
 numpy==1.23.5
 gym==0.23.1
 gym_super_mario_bros
+nes-py
+tensordict==0.3.0
+torchrl==0.3.0
+pandas>=1.3.0
+matplotlib>=3.3.0
+tqdm>=4.0.0
+Pillow>=8.0.0
