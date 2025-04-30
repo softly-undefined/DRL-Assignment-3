@@ -141,8 +141,11 @@ class DQNAgent:
         if not deterministic and random.random() < self.epsilon:
             action_idx = np.random.randint(self.n_actions)
         else:
-            state_t    = state[0].__array__() if isinstance(state, tuple) else state.__array__()
-            state_t    = torch.tensor(state_t, device=self.device).unsqueeze(0)
+            arr    = state[0].__array__() if isinstance(state, tuple) else state.__array__()
+
+            arr = arr.copy()
+            state_t = torch.from_numpy(arr).to(self.device).unsqueeze(0)
+            
             action_vals= self.qnet(state_t, model="online")
             action_idx = torch.argmax(action_vals, axis=1).item()
 
