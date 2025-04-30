@@ -142,10 +142,12 @@ class DQNAgent:
             action_idx = np.random.randint(self.n_actions)
         else:
             arr    = state[0].__array__() if isinstance(state, tuple) else state.__array__()
-
             arr = arr.copy()
-            state_t = torch.from_numpy(arr).to(self.device).unsqueeze(0)
-            
+
+            state_t = torch.from_numpy(arr)
+            state_t = state_t.float()
+            state_t = state_t.to(self.device).unsqueeze(0)
+
             action_vals= self.qnet(state_t, model="online")
             action_idx = torch.argmax(action_vals, axis=1).item()
 
