@@ -136,17 +136,29 @@ class DQNAgent:
         self.burnin     = 1000
         self.learn_every = 1
         self.sync_every  = 50_000
+        self.frame_buffer = deque(maxlen=4)
+
+    def preprocess(self, obs):
+        img = Image.fromarray(obs)
+        img = img.convert('L')
+        img = img.resize((84, 84), Image.BILINEAR)
+        arr = np.array(img, dtype=np.float32) / 255.0
+        return arr
 
     def act(self, state, deterministic=False):
         if not deterministic and random.random() < self.epsilon:
             action_idx = np.random.randint(self.n_actions)
         else:
-            arr    = state[0].__array__() if isinstance(state, tuple) else state.__array__()
-            arr = arr.copy()
+            obs = state[0] if isinstance(state, tuple) else state
 
-            state_t = torch.from_numpy(arr)
-            state_t = state_t.float()
-            state_t = state_t.to(self.device).unsqueeze(0)
+            processed_obs = self.preprocess(obs)
+
+            self.frame_buffer.append(processed_obs)
+            while len(self.frame_buffer, axis=0):
+                self.frame_buffer.append(processed_obs)
+
+            stacked = np.stack(self.frame_buffer, axis=0)
+            state_t = (torch.from_numpy(stacked).unsqueeze(0).to(self.device))
 
             action_vals= self.qnet(state_t, model="online")
             action_idx = torch.argmax(action_vals, axis=1).item()
