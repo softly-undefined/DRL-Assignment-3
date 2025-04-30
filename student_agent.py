@@ -154,7 +154,7 @@ class DQNAgent:
             processed_obs = self.preprocess(obs)
 
             self.frame_buffer.append(processed_obs)
-            while len(self.frame_buffer, axis=0):
+            while len(self.frame_buffer) < 4:
                 self.frame_buffer.append(processed_obs)
 
             stacked = np.stack(self.frame_buffer, axis=0)
