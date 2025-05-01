@@ -145,7 +145,7 @@ class DQNAgent:
         arr = np.array(img, dtype=np.float32) / 255.0
         return arr
 
-    def act(self, state, deterministic=False):
+    def act(self, state, deterministic=True):
         if not deterministic and random.random() < self.epsilon:
             action_idx = np.random.randint(self.n_actions)
         else:
@@ -262,7 +262,7 @@ class Agent(object):
         self.agent = DQNAgent(
             n_states = (4, 84, 84),
             n_actions = self.num_actions,
-            checkpoint=Path('new_checkpoint2') / 'mario_net_123.chkpt'
+            checkpoint=Path('new_checkpoint2') / 'mario_net_32.chkpt'
         )
         self.agent.epsilon = 0.0
 
