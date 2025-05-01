@@ -289,7 +289,7 @@ agent = DQNAgent(
                 env.observation_space.shape[2]),
     n_actions = env.action_space.n,
     save_dir = Path('demo'),
-    checkpoint = Path('new_checkpoint2') / 'mario_net_123.chkpt'
+    checkpoint = Path('new_checkpoint2') / 'mario_net_32.chkpt'
 )
 
 agent.epsilon = 0.0
@@ -303,10 +303,10 @@ for ep in range(1, num_episodes + 1):
     while not done:
         if ep == 1 or ep % 1 == 0: #only print the last one
             env.render()
-        action = agent.act(state, deterministic=False) # True)
+        action = agent.act(state, deterministic=True) # True)
         state, reward, done, info = env.step(action)
         total += reward
-        # time.sleep(0.02) #render delay
+        time.sleep(0.01) #render delay
     print(f"Episode {ep}: total_reward = {total:.2f}")
     total_rewards.append(total)
 
